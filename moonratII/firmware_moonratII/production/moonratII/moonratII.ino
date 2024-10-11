@@ -3,6 +3,9 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include <Fuzzy.h>
+#include <Arduino.h>
+#include <PID_v1.h>
 
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
@@ -10,9 +13,11 @@
 #define OLED_RESET -1
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-const int sensorPin = A0;
+const int SENSOR_PIN = A0;
 int HEATER_PWM = 10;
-int buzzerPin = 9;
+int BUZZER_PIN = 9;
+int TRIGGER_PIN = 11;
+int DEBUG_TEMP = 1;
 float temperaturaActual;
 
 
@@ -99,12 +104,12 @@ static const unsigned char PROGMEM image_data_Saraarray[] = {
 };
 
 void setup() {
-  pinMode(buzzerPin, OUTPUT);
-  analogWrite(buzzerPin, 50);
+  pinMode(BUZZER_PIN, OUTPUT);
+  analogWrite(BUZZER_PIN, 50);
   delay(500);
-  analogWrite(buzzerPin,0);
+  analogWrite(BUZZER_PIN,0);
   delay(100);
-  Serial.begin(9600);
+  Serial.begin(115200);
   if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
     Serial.println(F("Error al iniciar el OLED"));
     for (;;)
@@ -129,7 +134,55 @@ void setup() {
   pinMode(BUTTON_UP, INPUT_PULLUP);
   pinMode(BUTTON_DOWN, INPUT_PULLUP);
 }
-
+float readTempAndUpdateFiler() {
+      digitalWrite(TRIGGER_PIN,HIGH);
+      digitalWrite(TRIGGER_PIN,LOW);
+      int reading0 = analogRead(SENSOR_PIN); 
+      delay(90);
+      int reading1 = analogRead(SENSOR_PIN);
+//      Serial.print("reading0: "); Serial.println(reading0);
+//      Serial.print("reading1: "); Serial.println(reading1);
+      int reading = reading1;
+      Serial.println();
+      Serial.print("reading: "); Serial.println(reading);
+      // NOte: This is a TMP36, not a TMP37
+  //    CurrentTemp = (reading1 *4.98*50.0)/1024.0; //T6G SOC based on TMP37 Sensor
+      // Kalman Filter
+      // ROB Treating this math based on a TMP36
+      float temperatureC;
+      float temperature;
+      if (DEBUG_TEMP) {
+         //getting the voltage reading from the temperature sensor
+ 
+        // converting that reading to voltage, for 3.3v arduino use 3.3
+        float voltage = reading1 * 5.0;
+        voltage /= 1024.0; 
+ 
+ // print out the voltage
+  //      Serial.print("volts: "); Serial.println(voltage);
+ 
+ // now print out the temperature
+        temperatureC = (voltage - 0.5) * 100 ;  //converting from 10 mv per degree wit 500 mV offset
+                                               //to degrees ((voltage - 500mV) times 100)
+        Serial.print(temperatureC); Serial.println(" degrees C");
+        temperature = temperatureC;
+//        Serial.println(CurrentTemp); 
+      }
+      return temperature;
+      // Pc = P + Q;
+      // G = Pc/(Pc + R);
+      // P = (1-G) * Pc;
+      // Xp = FilteredTemp;
+      // Zp = Xp;
+      // FilteredTemp = G*(CurrentTemp-Zp)+Xp;    
+      // //  Serial.print("filter: "); 
+      // //  Serial.println(FilteredTemp); 
+      // for (int i = 0; i < numPoints - 1; i++)
+      // {
+      //   TempHistory[i] = TempHistory[i + 1];
+      // }
+      // TempHistory[numPoints - 1] = FilteredTemp;  
+}
 void loop() {
   displayMenu();
   checkButtons();
@@ -137,9 +190,9 @@ void loop() {
   
   while (true)
   {
-    int Volt = analogRead(sensorPin);
-    temperaturaActual = Volt * 250.0 / 1023.0;
-    
+    // int Volt = analogRead(SENSOR_PIN);
+    // temperaturaActual = Volt * 250.0 / 1023.0;
+    temperaturaActual = readTempAndUpdateFiler();
 
     for (int i = 0; i < numPoints - 1; i++)
     {
